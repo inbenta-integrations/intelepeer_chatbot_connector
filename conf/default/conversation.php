@@ -12,7 +12,7 @@ return [
             'answerAttributes'      => [
                 'ANSWER_TEXT',
             ],
-            'maxOptions'            => 10,
+            'maxOptions'            => 3,
             'maxRelatedContents'    => 2,
             'skipLastCheckQuestion' => true
         ],

@@ -14,8 +14,8 @@ return [
 
     //Add here the number or numbers needed when transfer a call
     'transfer_options' => [
-        'validate_on_transfer' => '', //posible values: '' (empty string for no transfer), 'directCall' or 'variable'
-        'variable_to_check' => '', //Applies when 'validate_on_transfer' is 'variable', otherwise empty array is correct
+        'validate_on_transfer' => '', //posible value: 'variable' or empty '' for no validation
+        'variables_to_check' => [], //Applies when 'validate_on_transfer' is 'variable', otherwise empty array is correct
         'transfer_numbers' => [
             'default' => '-', //Default transfer number ("-" (dash) if no number to transfer)
             //'transfer_phone2' => '',

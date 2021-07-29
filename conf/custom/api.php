@@ -3,5 +3,6 @@
 // Inbenta API configuration
 return [
     'key' => '',
-    'secret' => ''
+    'secret' => '',
+    'init_variable' => '' //empty string if there is no initial variable to check
 ];

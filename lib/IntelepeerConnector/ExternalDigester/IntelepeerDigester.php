@@ -82,6 +82,7 @@ class IntelepeerDigester extends DigesterInterface
                 $selectedOption = false;
                 $selectedOptionText = "";
                 $selectedEscalation = "";
+                $isRelatedContent = false;
                 $isListValues = false;
                 $isPolar = false;
                 $isEscalation = false;
@@ -89,13 +90,15 @@ class IntelepeerDigester extends DigesterInterface
                 foreach ($options as $option) {
                     if (isset($option->list_values)) {
                         $isListValues = true;
+                    } else if (isset($option->related_content)) {
+                        $isRelatedContent = true;
                     } else if (isset($option->is_polar)) {
                         $isPolar = true;
                     } else if (isset($option->escalate)) {
                         $isEscalation = true;
                     }
                     if ($userMessage == $option->opt_key || strtolower($userMessage) == strtolower($option->label)) {
-                        if ($isListValues || (isset($option->attributes) && isset($option->attributes->DYNAMIC_REDIRECT) && $option->attributes->DYNAMIC_REDIRECT == 'escalationStart')) {
+                        if ($isListValues || $isRelatedContent || (isset($option->attributes) && isset($option->attributes->DYNAMIC_REDIRECT) && $option->attributes->DYNAMIC_REDIRECT == 'escalationStart')) {
                             $selectedOptionText = $option->label;
                         } else if ($isEscalation) {
                             $selectedEscalation = $option->escalate;
@@ -122,17 +125,13 @@ class IntelepeerDigester extends DigesterInterface
                 } else if ($selectedOptionText !== "") {
                     $output[] = ['message' => $selectedOptionText];
                 } else if ($isEscalation && $selectedEscalation !== "") {
-                    if ($selectedEscalation === false) {
-                        $output[] = ['message' => "no"];
-                    } else {
-                        $output[] = ['escalateOption' => $selectedEscalation];
-                    }
+                    $output[] = ['escalateOption' => $selectedEscalation];
                 } else {
                     $output[] = ['message' => $request['body']];
                 }
             }
         } else if ($this->session->has('askForVariable')) {
-            //Cath the response if is asking for a variable from user response
+            //Catch the response if is asking for a variable from user response
             $variable = $this->processResponseWithSpaces(trim($request['body']));
             $this->connector->setVarFromResponse($variable);
         } else if (isset($request['body'])) {

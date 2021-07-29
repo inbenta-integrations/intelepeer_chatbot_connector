@@ -219,7 +219,7 @@ class IntelepeerConnector extends ChatbotConnector
             $messageToSend .= " " . $message["body"];
         }
         if (trim($escalationMessage) !== "") {
-            $messageToSend .= ", " . $escalationMessage;
+            $messageToSend .= trim($messageToSend) === '' ? $escalationMessage : ', ' . $escalationMessage;
         }
         $this->externalClient->sendMessage($messageToSend, $directCall, $phoneToTransfer);
     }
@@ -241,8 +241,7 @@ class IntelepeerConnector extends ChatbotConnector
             if (!$this->session->get('askingForEscalation', false)) {
                 if ($this->session->get('escalationType') == static::ESCALATION_DIRECT) {
                     $directCall = "agent";
-                    $this->checkPhoneToTransfer($directCall);
-                    $phoneToTransfer = $this->session->get("phoneToTransfer", "-");
+                    $phoneToTransfer = $this->checkPhoneToTransfer($directCall);
                 } else {
                     $this->session->set('askingForEscalation', true);
                     $escalationMessage = $this->digester->buildEscalationMessage();
@@ -260,19 +259,16 @@ class IntelepeerConnector extends ChatbotConnector
                     if ($response[0]['escalateOption']) {
                         $messageToSend = $this->lang->translate('creating_chat');
                         $directCall = "agent";
-                        $this->checkPhoneToTransfer($directCall);
-                        $phoneToTransfer = $this->session->get("phoneToTransfer", "-");
+                        $phoneToTransfer = $this->checkPhoneToTransfer($directCall);
+                        if ($phoneToTransfer === '-') {
+                            $messageToSend = $this->lang->translate('no_phone_to_transfer');
+                        }
                         $this->externalClient->sendMessage($messageToSend, $directCall, $phoneToTransfer);
                     } else {
-                        if ($this->session->get('escalationType') == static::ESCALATION_OFFER) {
-                            $message = ["message" => "no"];
-                            $botResponse = $this->sendMessageToBot($message);
-                            $this->sendMessagesToExternal($botResponse, $directCall, $phoneToTransfer);
-                        } else {
-                            $messageToSend = $this->lang->translate('escalation_rejected');
-                            $this->externalClient->sendMessage($messageToSend, $directCall, $phoneToTransfer);
-                            $this->trackContactEvent("CONTACT_REJECTED");
-                        }
+                        $messageToSend = $this->lang->translate('escalation_rejected');
+                        $this->externalClient->sendMessage($messageToSend);
+
+                        $this->trackContactEvent("CHAT_NO_AGENTS");
                         $this->session->delete('escalationType');
                         $this->session->delete('escalationV2');
                     }
@@ -322,7 +318,7 @@ class IntelepeerConnector extends ChatbotConnector
     }
 
     /**
-     * Validate if there are an expectig variable and if applies for the phone to transfer
+     * Validate if there is an expectig variable and if applies for the phone to transfer
      * @param bool $fromHandleEscalation = false
      * @return array $missingVars
      */
@@ -344,12 +340,14 @@ class IntelepeerConnector extends ChatbotConnector
                         }
                     }
                     if (count($phoneArray) > 0) {
-                        $phoneSearch = strtoupper(implode("_", $phoneArray));
-                        $phoneToTransfer = isset($transferOptions["transfer_numbers"][$phoneSearch]) ?
-                            $transferOptions["transfer_numbers"][$phoneSearch] :
-                            $phoneToTransfer;
+                        $phoneSearch = implode("_", $phoneArray);
+                        foreach ($transferOptions["transfer_numbers"] as $key => $phone) {
+                            if (strtolower($key) == strtolower($phoneSearch)) {
+                                $phoneToTransfer = $phone;
+                                break;
+                            }
+                        }
                     }
-                    //Blenrep = Blenrep,Belamaf
                     $this->session->delete("expectingVar");
                 }
                 $this->session->set("phoneToTransfer", $phoneToTransfer);

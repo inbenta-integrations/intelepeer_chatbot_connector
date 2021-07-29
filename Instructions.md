@@ -1,26 +1,26 @@
 # INTELEPEER CHATBOT INTEGRATION
 
 ### TABLE OF CONTENTS
-* [Introduction](#introduction)
-* [Features](#features)
-* [Prepare your Inbenta instances](#prepare-your-inbenta-instances)
-    * [Text Content](#text-content)
-* [Building the Intelepeer Connector](#building-the-intelepeer-connector)
-    * [Required Configuration](#required-configuration)
-    * [Optional Configuration](#optional-configuration)
-	* [ESCALATION (chat.php)](#escalation-chatphp)
-	* [CONVERSATION (conversation.php)](#conversation-conversationphp)
-	* [ENVIRONMENTS (environments.php)](#environments-environmentsphp)
-	* [ESCALATION (chat.php)](#escalation-chatphp)
-	* [Deployment](#deployment)
-* [Intelepeer Configuration](#intelepeer-configuration)
-    * [Template](#template)
-    * [Flows](#flows)
-    * [Initial Vars](#initial-vars)
-    * [Debug (optional)](#debug-optional)
-    * [Direct Calls](#direct-calls)
-* [Token](#token)
 
+- [Introduction](#introduction)
+- [Features](#features)
+- [Prepare your Inbenta instances](#prepare-your-inbenta-instances)
+  - [Text Content](#text-content)
+- [Building the Intelepeer Connector](#building-the-intelepeer-connector)
+  - [Required Configuration](#required-configuration)
+  - [Optional Configuration](#optional-configuration)
+  - [ESCALATION (chat.php)](#escalation-chatphp)
+  - [CONVERSATION (conversation.php)](#conversation-conversationphp)
+  - [ENVIRONMENTS (environments.php)](#environments-environmentsphp)
+  - [ESCALATION (chat.php)](#escalation-chatphp)
+  - [Deployment](#deployment)
+- [Intelepeer Configuration](#intelepeer-configuration)
+  - [Template](#template)
+  - [Flows](#flows)
+  - [Initial Vars](#initial-vars)
+  - [Debug (optional)](#debug-optional)
+  - [Direct Calls](#direct-calls)
+- [Token](#token)
 
 ## Introduction
 
@@ -41,7 +41,7 @@ The following features of Inbenta’s chatbot are supported in the Intelepeer in
 
 ### Text Content
 
-The content from your instance should be simple: ***avoid the use of HTML tags, multimedia and URLs***. This is especially important if you are using Voice template, most of the HTML tags are not recognized by the TTS (Text-To-Speech) services and may cause malfunction.
+The content from your instance should be simple: **_avoid the use of HTML tags, multimedia and URLs_**. This is especially important if you are using Voice template, most of the HTML tags are not recognized by the TTS (Text-To-Speech) services and may cause malfunction.
 
 “**Natural Language Search**” is the best **Transition type** for dialogs.
 
@@ -49,7 +49,7 @@ The content from your instance should be simple: ***avoid the use of HTML tags, 
 
 #### Required Configuration
 
-In your UI directory, go to **conf**. Here, you have a README.md file with some structure and usage explanations. 
+In your UI directory, go to **conf**. Here, you have a README.md file with some structure and usage explanations.
 
 Fill the **key** and **secret** values inside the **conf/custom/api.php** file with your Inbenta Chatbot API credentials (Here is the documentation on how to find the key and secret from Inbenta’s backstage. Use the same credentials as backstage to access the article).
 
@@ -68,14 +68,14 @@ There are some optional features that can be enabled from the configuration file
 ### CONVERSATION (conversation.php)
 
 - **default:** Contains the API conversation configuration. The values are described below:
-	- **answers:**
-		- **sideBubbleAttributes:** Dynamic settings to show side-bubble content. This value will append to the main response.
-		- **answerAttributes:** Dynamic settings to show as the bot answer. The default is [ "ANSWER_TEXT" ]. Setting multiple dynamic settings generates a bot answer with concatenated values with a newline character (\n).
-		- **maxOptions:** Maximum number of options returned in a multiple-choice answer.
-	- **forms**
-		- **allowUserToAbandonForm:** Whether or not a user is allowed to abandon the form after a number of consecutive failed answers. The default value is **true**.
-		- **errorRetries:** The number of times a user can fail a form field before being asked if he wants to leave the form. The default value is 3.
-	- **lang:** Language of the bot, represented by its ISO 639-1 code. Accepted values: ca, de, en, es, fr, it, ja, ko, nl, pt, zh, ru, ar, hu, eu, ro, gl, da, sv, no, tr, cs, fi, pl, el, th, id, uk
+  - **answers:**
+    - **sideBubbleAttributes:** Dynamic settings to show side-bubble content. This value will append to the main response.
+    - **answerAttributes:** Dynamic settings to show as the bot answer. The default is [ "ANSWER_TEXT" ]. Setting multiple dynamic settings generates a bot answer with concatenated values with a newline character (\n).
+    - **maxOptions:** Maximum number of options returned in a multiple-choice answer.
+  - **forms**
+    - **allowUserToAbandonForm:** Whether or not a user is allowed to abandon the form after a number of consecutive failed answers. The default value is **true**.
+    - **errorRetries:** The number of times a user can fail a form field before being asked if he wants to leave the form. The default value is 3.
+  - **lang:** Language of the bot, represented by its ISO 639-1 code. Accepted values: ca, de, en, es, fr, it, ja, ko, nl, pt, zh, ru, ar, hu, eu, ro, gl, da, sv, no, tr, cs, fi, pl, el, th, id, uk
 - **user_type:** Profile identifier from the Backstage knowledge base. Minimum:0. Default:0. You can find your profile list in your Chatbot Instance → Settings → User Types.
 - **source:** Source identifier (Default value **intelepeer**) used to filter the logs in the dashboards.
 
@@ -84,27 +84,26 @@ There are some optional features that can be enabled from the configuration file
 This file allows configuring a rule to detect the current environment for the connector, this process is made through the URL where the application is running. It can check the current **http_host** or the **script_name** in order to detect the environment.
 
 - **development:**
-	- **type:** Detection type: check the **http_host** (e.g. www.example.com) or the **script_name** (e.g. /path/to/the/connector/server.php).
-	- **regex:** Regex to match with the detection type (e.g. “/^dev.mydomain.com$/m“ will set the “development” environment when the detection type is dev.example.com).
+  - **type:** Detection type: check the **http_host** (e.g. www.example.com) or the **script_name** (e.g. /path/to/the/connector/server.php).
+  - **regex:** Regex to match with the detection type (e.g. “/^dev.mydomain.com$/m“ will set the “development” environment when the detection type is dev.example.com).
 
 ### ESCALATION (chat.php)
 
 This file has the option for make an escalation to a live agent:
 
 - **chat:**
-	- **enabled:** Enable or disable HyperChat (“**true**” or “**false**”).
+  - **enabled:** Enable or disable HyperChat (“**true**” or “**false**”).
 - **triesBeforeEscalation:** Number of no-result answers in a row after the bot should escalate to an agent (if available). Numeric value, not a string. Zero means it’s disabled.
 - **negativeRatingsBeforeEscalation:** Number of negative content ratings in a row after the bot should escalate to an agent (if available). Numeric value, not a string. Zero means it’s disabled.
-- **transfer_options:** Here are the number or numbers to transfer an also the options when 
-	- **validate_on_transfer:** Possible values: variable or directCall. If variable is set, it’ll check the list of variables_to_check before make the escalation. If directCall, it will check the directCall value from the Bot response.
-	- **variables_to_check:** Array value with the list of the names of variables to check. This applies when 'validate_on_transfer' is 'variable', otherwise empty array is correct.
-	- **transfer_numbers:** Array value with the list of numbers for the escalation. Example:
+- **transfer_options:** Here are the number or numbers to transfer an also the options when
+  - **validate_on_transfer:** Possible values: **variable** or ““ (empty string for no validation). If “variable” is set, it’ll check the list of variables_to_check before make the escalation.
+  - **variables_to_check:** Array value with the list of the names of variables to check. This applies when 'validate_on_transfer' is 'variable', otherwise empty array is correct.
+  - **transfer_numbers:** Array value with the list of numbers for the escalation. Example:
 
 ```php
 'transfer_numbers' => [
     'default' => '1234561', //Default transfer number ("-" if no number to transfer)
     //'var1_var2' => '1234562', //If validation is made with 'variable'
-    //'sales' => '1234565', //If validation is made with 'directCall'
     //'' => '' //You could have multiple transfer numbers or just the 'defaul'
 ]
 ```
@@ -121,7 +120,6 @@ The Intelepeer template must be served by a public web server in order to allow 
 - Non-CPU-bound
 - The latest version of [Composer](https://getcomposer.org/) (Dependency Manager for PHP) to install all dependencies that Inbenta requires for the integration.
 - If the client has a **distributed infrastructure**, this means that multiple servers can manage the user session, they must adapt their SessionHandler so that the entire session is shared among all its servers.
-
 
 ## Intelepeer Configuration
 

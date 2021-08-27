@@ -3,28 +3,27 @@
 ### TABLE OF CONTENTS
 
 - [Introduction](#introduction)
-- [Features](#features)
+  - [Features](#features)
 - [Prepare your Inbenta instances](#prepare-your-inbenta-instances)
   - [Text Content](#text-content)
-- [Building the Intelepeer Connector](#building-the-intelepeer-connector)
-  - [Required Configuration](#required-configuration)
-  - [Optional Configuration](#optional-configuration)
-  - [ESCALATION (chat.php)](#escalation-chatphp)
+  - [Building the Intelepeer Connector](#building-the-intelepeer-connector)
+    - [Required Configuration](#required-configuration)
+    - [Optional Configuration](#optional-configuration)
   - [CONVERSATION (conversation.php)](#conversation-conversationphp)
   - [ENVIRONMENTS (environments.php)](#environments-environmentsphp)
   - [ESCALATION (chat.php)](#escalation-chatphp)
   - [Deployment](#deployment)
 - [Intelepeer Configuration](#intelepeer-configuration)
+  - [Account](#account)
   - [Template](#template)
   - [Flows](#flows)
   - [Initial Vars](#initial-vars)
   - [Debug (optional)](#debug-optional)
-  - [Direct Calls](#direct-calls)
-- [Token](#token)
+  - [Token](#token)
 
 ## Introduction
 
-If you want your users to use voice to chat with Inbenta’s chatbot, you could use this connector to integrate with [Intelepeer](https://www.intelepeer.com/). This connects to Intelepeer’s SmartFlows.
+If you want your users to use voice / SMS to chat with Inbenta’s chatbot, you could use this connector to integrate with [Intelepeer](https://www.intelepeer.com/). This connects to Intelepeer’s SmartFlows.
 
 ### Features
 
@@ -35,7 +34,7 @@ The following features of Inbenta’s chatbot are supported in the Intelepeer in
 - Multiple options.
 - Polar Questions.
 - Dialogs.
-- Forms, Actions & Variables (Keep in mind we are using voice as a channel. So, not all variable types work best with voice. Example: Email, Date).
+- Forms, Actions & Variables (For voice implementation, keep in mind not all variable types work best with voice. Example: Email, Date).
 
 ## Prepare your Inbenta instances
 
@@ -58,7 +57,7 @@ Additional, in this file you can define the name of a variable (**init_variable*
 ```php
 'key' => '',
 'secret' => '',
-'init_variable' => '' //Set the initial variable name, if needed
+'init_variable' => '' //Set the initial variable name, if needed (empty string if there is no initial variable)
 ```
 
 #### Optional Configuration
@@ -92,23 +91,32 @@ This file allows configuring a rule to detect the current environment for the co
 This file has the option for make an escalation to a live agent:
 
 - **chat:**
-  - **enabled:** Enable or disable HyperChat (“**true**” or “**false**”).
+  * **enabled:** Enable or disable HyperChat (“**true**” or “**false**”). This configuration applies only for **SMS implementation**.
+  * **version:** HyperChat version. The default and latest one is 1.
+  * **appId:** The ID of the HyperChat app. This defines the instance in which the chat opens. You can find it in your instance → Messenger → Settings → Chat.
+  * **secret:** Your HyperChat instance application secret. You can find it in your instance → Messenger → Settings → Chat.
+  * **roomId:** The room where the chat opens. This is mapped directly to a Backstage queue ID. Numeric value, not a string. You can find your rooms list it in your instance → Messenger → Settings → Queues.
+  * **lang:** Language code (in ISO 639-1 format) for the current chat. This is used when the engine checks if there are agents available for this language to assign the chat to one of them.
+  * **source:** Source id from the sources in your instance. Numeric value, not a string. The default value is **3**. You can find your sources list it in your instance → Messenger → Settings → Sources.
+  * **regionServer:** The geographical region where the HyperChat app lives.
+  * **server:** The Hyperchat server URL assigned to your instance. Ask your Inbenta contact for this configuration parameter.
+  * **server_port:** The port where to communicate with the Hyperchat server. It’s defined in your instance → Messenger → Settings → Chat -->Port
 - **triesBeforeEscalation:** Number of no-result answers in a row after the bot should escalate to an agent (if available). Numeric value, not a string. Zero means it’s disabled.
 - **negativeRatingsBeforeEscalation:** Number of negative content ratings in a row after the bot should escalate to an agent (if available). Numeric value, not a string. Zero means it’s disabled.
-- **transfer_options:** Here are the number or numbers to transfer an also the options when
+- **transfer_options:** Here is the number or numbers to transfer. This configuration is only for Voice implementation.
   - **validate_on_transfer:** Possible values: **variable** or ““ (empty string for no validation). If “variable” is set, it’ll check the list of variables_to_check before make the escalation.
   - **variables_to_check:** Array value with the list of the names of variables to check. This applies when 'validate_on_transfer' is 'variable', otherwise empty array is correct.
   - **transfer_numbers:** Array value with the list of numbers for the escalation. Example:
 
 ```php
 'transfer_numbers' => [
-    'default' => '1234561', //Default transfer number ("-" if no number to transfer)
+    'default' => '1234561', //Default transfer number ("-" (hyphen) if no number to transfer)
     //'var1_var2' => '1234562', //If validation is made with 'variable'
-    //'' => '' //You could have multiple transfer numbers or just the 'defaul'
+    //'' => '' //You could have multiple transfer numbers or just the 'default'
 ]
 ```
 
-> Since **variables_to_check** is a list, you can have 1 or more variables to check before the escalation. In the **transfer_numbers** array, you must divide every value with an underscore (`v1_v2`). If you have only one variable, you don’t need any additional character (`v1`).
+> Since **variables_to_check** is a list, you can have 1 or more variables to check before the escalation. In the **transfer_numbers** array, you must divide every value with an underscore (`var1_var2`). If you have only one variable, you don’t need any additional character (`var1`).
 
 ### Deployment
 
@@ -123,40 +131,59 @@ The Intelepeer template must be served by a public web server in order to allow 
 
 ## Intelepeer Configuration
 
-### Template
+### Account
+
+[Login](#https://customer.intelepeer.com/home?n=1) into your Intelepeer account:
+
+![instructions01](public/img/instructions01.png)
+
+### Template
 
 Into your Intelepeer dashboard, go to SmartFlows:
 
-![instructions01](public/instructions01.png)
+![instructions02](public/img/instructions02.png)
+
+### Flows
 
 In the SmartFlows screen, click on the “+” button:
 
-![instructions02](public/instructions02.png)
+![instructions03](public/img/instructions03.png)
 
 And then select “Template”:
 
-![instructions03](public/instructions03.png)
+![instructions04](public/img/instructions04.png)
 
 Search the Template of “**Inbenta Voice**” or “**Inbenta SMS**” and click on “Select”:
 
-![instructions04](public/instructions04.png)
+![instructions05](public/img/instructions05.png)
 
 ### Initial Vars
 
-Once the Template is selected, and the SmartFlow editor opened, you will find a different number of nodes, depending on the selected Template. In the **InitVars** node you can find the configurations for the connector.
+Once the Template is selected  (Voice or SMS), and the SmartFlow editor opened, you will find a different number of nodes, depending on the selected Template. In the **InitVars** node you can find the configurations for the connector.
 
-![instructions05](public/instructions05.png)
+![instructions06](public/img/instructions06.png)
 
-These are the values that you should change in the **InitVars** node (notice that the variables starting with “**$Audio…**” and “**$MaxAttempts**” only applies for Voice SmartFlow):
+These are the values that you should change in the **InitVars** node:
 
-- **$ApiUrl:** This is the public URL where the Connector is installed.
-- **$Token:** This is a customer defined value (password like value), see “Token” section for more details.
+- **$ApiUrl:** This is the public URL where the Connector is hosted.
+- **$Token:** This is a customer defined value (password like value), see [Token](#token) section for more details.
 - **$UrlDebug:** Url where a debugger is installed, see “Debug” section below for more details.
 - **$Debug:** Switch to indicate to SmartFlow if the Debug is On (1) or Off (0), see “Debug” section below for more details.
-- **$AudioTryAgain:** Text for the message to hear when there is no a voice instruction from the caller.
-- **$AudioMaxAttempts:** Text that users will hear when the maximum attempts of no messages is reached
-- **$AudioError:** Change this text to hear the message when an error occurs.
-- **$MaxAttempts:** Number for maximum attempts of no message received.
+- **$AudioTryAgain:** (Voice implementation) Text for the message to hear when there is no a voice instruction from the caller.
+- **$AudioMaxAttempts:** (Voice implementation) Text that users will hear when the maximum attempts of no messages is reached
+- **$AudioError:** (Voice implementation) Change this text to hear the message when an error occurs.
+- **$MaxAttempts:** (Voice implementation) Number for maximum attempts of no message received.
+- **$FlowID** (SMS implementation) Flow ID of the SMS API flow. This is only if Hyperchat is active (see [SMS API](#sms-api-smart-flow) section)
+
+### SMS API Smart Flow
+
+In order to make Hyperchat escalation work, you'll need to set up the **SMS API Smart Flow** (contact to Intelepeer Support to get this flow active).
+
+![instructions07](public/img/instructions07.png)
+
+Copy the **Flow ID** and paste it in the **InitVar** node and in  **$FlowId** variable, of the SMS Flow:
+
+![instructions08](public/img/instructions08.png)
 
 ### Debug (optional)
 
@@ -164,39 +191,17 @@ You can use a debugger to validate what is happening on the flow. In this case, 
 
 In the SmartFlow Template, click on DebugCall node, in the SmartFlow editor:
 
-![instructions06](public/instructions06.png)
+![instructions09](public/img/instructions09.png)
 
 On the lateral column appears the properties of the node. In this case you can fill the values that applies for your debugger:
 
-![instructions07](public/instructions07.png)
+![instructions10](public/img/instructions10.png)
 
 And also set the text of the body that is going to be sent to the debugger:
 
-![instructions08](public/instructions08.png)
+![instructions11](public/img/instructions11.png)
 
 > For production environment the recommendation is to set $Debug = 0
-
-### Direct Calls
-
-The response from the Chatbot Connector has a variable called “**directCall**” and is used to catch an action inside the loop of the flow. This action could be speak with a live human agent or end the call.
-
-In the SmartFlow this can be found as **ActionSwitch**:
-
-![instructions09](public/instructions09.png)
-
-![instructions10](public/instructions10.png)
-
-**directCall** values can be added in the Inbenta’s backstage. You need to add a new content with the intent (Title and ANSWER_TEXT are required):
-
-![instructions11](public/instructions11.png)
-
-And check “Direct call” with the trigger word (that should be the same as one of the options of SmartFlow’s “**ActionSwitch**” node):
-
-![instructions12](public/instructions12.png)
-
-> Inbenta uses AI and NLP that will automatically detects the intent. So you could use similar words to ask for the same thing (for the escalation example: talk with a human, chat with a person, speak with somebody, etc.).
-
-With this option, you can add multiple actions besides the Chatbot loop.
 
 ### Token
 

@@ -9,7 +9,7 @@ class ChatbotAPIClientCustom extends ChatbotAPIClient
 {
 
     /**
-     * Get a the avialbale variables of the conversation
+     * Get all the available variables of the conversation
      */
     public function getVariables()
     {

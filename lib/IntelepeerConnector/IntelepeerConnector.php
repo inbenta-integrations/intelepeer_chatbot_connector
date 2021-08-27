@@ -7,6 +7,7 @@ use Inbenta\ChatbotConnector\ChatbotConnector;
 use Inbenta\ChatbotConnector\Utils\SessionManager;
 use Inbenta\IntelepeerConnector\ExternalAPI\IntelepeerAPIClient;
 use Inbenta\IntelepeerConnector\ExternalDigester\IntelepeerDigester;
+use Inbenta\IntelepeerConnector\HyperChatAPI\IntelepeerHyperChatClient;
 
 ## Customized Chatbot API
 use Inbenta\IntelepeerConnector\APIClientCustom\ChatbotAPIClientCustom as ChatbotAPIClient;
@@ -36,10 +37,16 @@ class IntelepeerConnector extends ChatbotConnector
             // Try to get the translations from ExtraInfo and update the language manager
             $this->getTranslationsFromExtraInfo('intelepeer', 'translations');
 
+            // Initialize Hyperchat events handler
+            if ($this->conf->get('chat.chat.enabled') && ($this->session->get('chatOnGoing', false) || isset($_SERVER['HTTP_X_HOOK_SECRET']))) {
+                $chatEventsHandler = new IntelepeerHyperChatClient($this->conf->get('chat.chat'), $this->lang, $this->session, $this->conf, $this->externalClient);
+                $chatEventsHandler->handleChatEvent();
+            }
+
             // Instance application components
             $externalClient    = new IntelepeerAPIClient($request); // Instance Intelepeer client
-            $chatClient        = null; //new IntelepeerHyperChatClient($this->conf->get('chat.chat'), $this->lang, $this->session, $this->conf, $externalClient);  // Instance HyperchatClient for Intelepeer
-            $externalDigester  = new IntelepeerDigester($this->lang, $this->conf->get('conversation.digester'), $this->session, $this); // Instance Intelepeer digester
+            $chatClient        = new IntelepeerHyperChatClient($this->conf->get('chat.chat'), $this->lang, $this->session, $this->conf, $externalClient);  // Instance HyperchatClient for Intelepeer
+            $externalDigester  = new IntelepeerDigester($this->lang, $this->conf->get('conversation.digester'), $this->session); // Instance Intelepeer digester
 
             $this->initComponents($externalClient, $chatClient, $externalDigester);
         } catch (Exception $e) {
@@ -56,9 +63,19 @@ class IntelepeerConnector extends ChatbotConnector
     {
         // Try to get user_id from a Intelepeer message request
         $externalId = IntelepeerAPIClient::buildExternalIdFromRequest($this->conf->get('intelepeer.token'));
+        if (is_null($externalId)) {
+            // Try to get user_id from a Hyperchat event request
+            $externalId = IntelepeerHyperChatClient::buildExternalIdFromRequest($this->conf->get('chat.chat'));
+        }
         if (empty($externalId)) {
-            throw new Exception("Invalid request");
-            die();
+            $api_key = $this->conf->get('api.key');
+            if (isset($_SERVER['HTTP_X_HOOK_SECRET'])) {
+                // Create a temporary session_id from a HyperChat webhook linking request
+                $externalId = "hc-challenge-" . preg_replace("/[^A-Za-z0-9 ]/", '', $api_key);
+            } else {
+                throw new Exception("Invalid request");
+                die();
+            }
         }
         return $externalId;
     }
@@ -79,7 +96,20 @@ class IntelepeerConnector extends ChatbotConnector
     {
         if (isset($digestedRequest[0])) {
             $this->handleWelcomeMessage($digestedRequest[0]);
+
+            if (isset($digestedRequest[0]['variable'])) {
+                $this->setVarFromResponse($digestedRequest[0]['variable']);
+            }
         }
+
+        if ($this->chatOnGoing()) {
+            $this->sendMessagesToChat($digestedRequest);
+            $response = ["action" => "end"]; //Response from SMS, this "action" is sent to prevent response from Smart Flow
+            header('Content-Type: application/json');
+            echo json_encode($response);
+            die();
+        }
+        // If user answered to an ask-to-escalate question, handle it
         if ($this->session->get('askingForEscalation', false)) {
             $this->handleEscalation($digestedRequest);
         }
@@ -93,7 +123,6 @@ class IntelepeerConnector extends ChatbotConnector
     public function handleBotActions($externalRequest)
     {
         $needEscalation = false;
-        $directCall = "";
         foreach ($externalRequest as $message) {
             // Check if is needed to execute any preset 'command'
             $this->handleCommands($message);
@@ -102,20 +131,24 @@ class IntelepeerConnector extends ChatbotConnector
             $this->saveLastTextMessage($message);
             // Send the messages received from the external service to the ChatbotAPI
             $botResponse = $this->sendMessageToBot($message);
-            $directCall = $this->checkDirectCall($botResponse);
 
             $this->validateInitialVariable();
             $this->validateExpectingVar();
-
-            $phoneToTransfer = $this->checkPhoneToTransfer($directCall);
 
             $needEscalation = $this->checkEscalation($botResponse) ? true : $needEscalation;
             if ($needEscalation) {
                 $this->deleteLastMessage($botResponse);
                 $this->handleEscalation($botResponse);
             }
+
+            // Check if it has attached an escalation form
+            $hasFormData = $this->checkEscalationForm($botResponse);
+            if ($needEscalation || $hasFormData) {
+                $this->handleEscalation();
+            }
+
             // Send the messages received from ChatbotApi back to the external service
-            $this->sendMessagesToExternal($botResponse, $directCall, $phoneToTransfer);
+            $this->sendMessagesToExternal($botResponse);
         }
     }
 
@@ -164,43 +197,16 @@ class IntelepeerConnector extends ChatbotConnector
     }
 
     /**
-     * Check if response has direct call
-     */
-    protected function checkDirectCall($botResponse)
-    {
-        if (isset($botResponse->answers) && is_array($botResponse->answers)) {
-            $messages = $botResponse->answers;
-        } else {
-            $messages = array($botResponse);
-        }
-        foreach ($messages as $msg) {
-            if (isset($msg->attributes) && isset($msg->attributes->DIRECT_CALL) && trim($msg->attributes->DIRECT_CALL) !== "") {
-                return $msg->attributes->DIRECT_CALL;
-            }
-        }
-        return "";
-    }
-
-    /**
      * Check if response has phone to make the transfer
-     * @param string $directCall = ""
      * @return string $phoneToTransfer
      */
-    protected function checkPhoneToTransfer(string $directCall = "")
+    protected function checkPhoneToTransfer()
     {
         $phoneToTransfer = "-";
         if ($this->conf->get('chat.transfer_options.validate_on_transfer') === 'variable') {
             $phoneToTransfer = $this->session->get("phoneToTransfer", "-");
         } else {
-            if (trim($directCall) !== "") {
-                try {
-                    $phoneToTransfer = $this->conf->get('chat.transfer_options.transfer_numbers.' . $directCall);
-                } catch (\Exception $e) {
-                    // If there is no phone number assigned in the "transfer_numbers" with the directCall
-                    $phoneToTransfer = $this->conf->get('chat.transfer_options.transfer_numbers.default');
-                }
-                $this->session->set("phoneToTransfer", $phoneToTransfer);
-            }
+            $phoneToTransfer = $this->conf->get('chat.transfer_options.transfer_numbers.default');
         }
         return $phoneToTransfer;
     }
@@ -209,7 +215,7 @@ class IntelepeerConnector extends ChatbotConnector
      * Overwritten
      * Send messages to the external service. Messages should be formatted as a ChatbotAPI response
      */
-    protected function sendMessagesToExternal($messages, string $directCall = "", string $phoneToTransfer = "", string $escalationMessage = "")
+    protected function sendMessagesToExternal($messages, string $phoneToTransfer = "", string $escalationMessage = "")
     {
         // Digest the bot response into the external service format
         $digestedBotResponse = $this->digester->digestFromApi($messages, $this->session->get('lastUserQuestion'));
@@ -221,62 +227,65 @@ class IntelepeerConnector extends ChatbotConnector
         if (trim($escalationMessage) !== "") {
             $messageToSend .= trim($messageToSend) === '' ? $escalationMessage : ', ' . $escalationMessage;
         }
-        $this->externalClient->sendMessage($messageToSend, $directCall, $phoneToTransfer);
+        $this->externalClient->sendMessage($messageToSend, $phoneToTransfer);
     }
 
     /**
-     * Overwritten
+     * Check escalation for voice request type, otherwise call to the parent method
      */
     protected function handleEscalation($response = null)
     {
-        $expectingVars = $this->validateExpectingVar(true);
-        if (count($expectingVars) == 0 || $this->session->get("variableNotFound", 0) === 2) {
-            $directCall = "";
-            $phoneToTransfer = "";
-            $escalationMessage = "";
-            $this->session->delete("askForVariable");
-            $this->session->delete("variableNotFound");
-            $this->session->delete("variableNotFoundMessage");
+        if ($this->digester->typeRequest === 'voice') {
+            $expectingVars = $this->validateExpectingVar(true);
+            if (count($expectingVars) == 0 || $this->session->get("variableNotFound", 0) === 2) {
+                $phoneToTransfer = "";
+                $escalationMessage = "";
+                $this->session->delete("askForVariable");
+                $this->session->delete("variableNotFound");
+                $this->session->delete("variableNotFoundMessage");
 
-            if (!$this->session->get('askingForEscalation', false)) {
-                if ($this->session->get('escalationType') == static::ESCALATION_DIRECT) {
-                    $directCall = "agent";
-                    $phoneToTransfer = $this->checkPhoneToTransfer($directCall);
-                } else {
-                    $this->session->set('askingForEscalation', true);
-                    $escalationMessage = $this->digester->buildEscalationMessage();
-                }
-                $this->sendMessagesToExternal($response, $directCall, $phoneToTransfer, $escalationMessage);
-                die;
-            } else {
-                // Handle user response to an escalation question
-                $this->session->set('askingForEscalation', false);
-                // Reset escalation counters
-                $this->session->set('noResultsCount', 0);
-                $this->session->set('negativeRatingCount', 0);
-
-                if (count($response) && isset($response[0]['escalateOption'])) {
-                    if ($response[0]['escalateOption']) {
+                if (!$this->session->get('askingForEscalation', false)) {
+                    if ($this->session->get('escalationType') == static::ESCALATION_DIRECT) {
+                        $phoneToTransfer = $this->checkPhoneToTransfer();
                         $messageToSend = $this->lang->translate('creating_chat');
-                        $directCall = "agent";
-                        $phoneToTransfer = $this->checkPhoneToTransfer($directCall);
-                        if ($phoneToTransfer === '-') {
-                            $messageToSend = $this->lang->translate('no_phone_to_transfer');
-                        }
-                        $this->externalClient->sendMessage($messageToSend, $directCall, $phoneToTransfer);
+                        $this->externalClient->sendMessage($messageToSend, $phoneToTransfer);
                     } else {
-                        $messageToSend = $this->lang->translate('escalation_rejected');
-                        $this->externalClient->sendMessage($messageToSend);
-
-                        $this->trackContactEvent("CHAT_NO_AGENTS");
-                        $this->session->delete('escalationType');
-                        $this->session->delete('escalationV2');
+                        $this->session->set('askingForEscalation', true);
+                        $escalationMessage = $this->digester->buildEscalationMessage();
+                        $this->sendMessagesToExternal($response, $phoneToTransfer, $escalationMessage);
                     }
                     die;
+                } else {
+                    // Handle user response to an escalation question
+                    $this->session->set('askingForEscalation', false);
+                    // Reset escalation counters
+                    $this->session->set('noResultsCount', 0);
+                    $this->session->set('negativeRatingCount', 0);
+
+                    if (count($response) && isset($response[0]['escalateOption'])) {
+                        if ($response[0]['escalateOption']) {
+                            $messageToSend = $this->lang->translate('creating_chat');
+                            $phoneToTransfer = $this->checkPhoneToTransfer();
+                            if ($phoneToTransfer === '-') {
+                                $messageToSend = $this->lang->translate('no_phone_to_transfer');
+                            }
+                            $this->externalClient->sendMessage($messageToSend, $phoneToTransfer);
+                        } else {
+                            $messageToSend = $this->lang->translate('escalation_rejected');
+                            $this->externalClient->sendMessage($messageToSend);
+
+                            $this->trackContactEvent("CHAT_NO_AGENTS");
+                            $this->session->delete('escalationType');
+                            $this->session->delete('escalationV2');
+                        }
+                        die;
+                    }
                 }
+            } else {
+                $this->askForVariables($expectingVars[0], $response);
             }
         } else {
-            $this->askForVariables($expectingVars[0], $response);
+            parent::handleEscalation($response);
         }
     }
 
@@ -311,9 +320,8 @@ class IntelepeerConnector extends ChatbotConnector
         } else {
             $this->session->delete("countErrorsInitVar");
             $messageToSend = $this->lang->translate('creating_chat');
-            $directCall = "agent";
             $phoneToTransfer = $this->conf->get('chat.transfer_options.transfer_numbers.default');
-            $this->externalClient->sendMessage($messageToSend, $directCall, $phoneToTransfer);
+            $this->externalClient->sendMessage($messageToSend, $phoneToTransfer);
         }
     }
 
@@ -417,5 +425,64 @@ class IntelepeerConnector extends ChatbotConnector
         $this->deleteLastMessage($messageForEscalation);
         $this->handleEscalation($messageForEscalation);
         die;
+    }
+
+    /**
+     * Overwritten
+     * 	Tries to start a chat with an agent
+     */
+    protected function escalateToAgent()
+    {
+        $messageToUser = $this->buildTextMessage($this->lang->translate('out_of_time'));
+        if ($this->checkServiceHours()) {
+            if ($this->checkAgents()) {
+                // Start chat
+                $messageToUser = $this->buildTextMessage($this->lang->translate('creating_chat'));
+                $extraInfo = method_exists($this->externalClient, "getExtraInfo") ? $this->externalClient->getExtraInfo() : [];
+                // Build user data for HyperChat API
+                $chatData = array(
+                    'roomId' => $this->conf->get('chat.chat.roomId'),
+                    'user' => array(
+                        'name'          => $this->externalClient->getFullName(),
+                        'contact'       => $this->externalClient->getEmail(),
+                        'externalId'    => $this->externalClient->getExternalId(),
+                        'extraInfo'     => $extraInfo
+                    )
+                );
+                $history = $this->chatbotHistory();
+                if (count($history) > 0) {
+                    $chatData['history'] = $history;
+                }
+                $response = $this->chatClient->openChat($chatData);
+                if (!isset($response->error) && isset($response->chat)) {
+                    $this->session->set('chatOnGoing', $response->chat->id);
+                    if ($this->session->get('escalationV2', false)) {
+                        $this->trackContactEvent("CHAT_ATTENDED", $response->chat->id);
+                    } else {
+                        $this->trackContactEvent("CONTACT_ATTENDED");
+                    }
+                } else {
+                    $messageToUser = $this->buildTextMessage($this->lang->translate('error_creating_chat'));
+                }
+            } else {
+                // Send no-agents-available message if the escalation trigger is an API flag (user asked for having a chat explicitly)
+                if ($this->session->get('escalationType') == static::ESCALATION_API_FLAG || $this->session->get('escalationV2', false)) {
+
+                    if ($this->session->get('escalationV2', false)) {
+                        $this->setVariableValue("agents_available", "false");
+                        $message = ["directCall" => "escalationStart"];
+                        $botResponse = $this->sendMessageToBot($message);
+                        $messageToUser = $botResponse;
+                    } else {
+                        $messageToUser = $this->buildTextMessage($this->lang->translate('no_agents'));
+                    }
+                }
+                $this->trackContactEvent("CHAT_NO_AGENTS");
+            }
+        }
+        $this->session->delete('escalationForm');
+        $this->session->delete('escalationType');
+        $this->session->delete('escalationV2');
+        $this->sendMessagesToExternal($messageToUser);
     }
 }

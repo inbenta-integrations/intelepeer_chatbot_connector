@@ -11,19 +11,17 @@ class IntelepeerDigester extends DigesterInterface
     //protected $channel;
     protected $langManager;
     protected $session;
-    protected $typeRequest;
-    protected $connector;
+    public $typeRequest;
 
     /**
      * Digester contructor
      */
-    public function __construct($langManager, $conf, $session, $connector)
+    public function __construct($langManager, $conf, $session)
     {
         $this->langManager = $langManager;
         //$this->channel = 'intelepeer';
         $this->conf = $conf;
         $this->session = $session;
-        $this->connector = $connector;
     }
 
     /**
@@ -67,6 +65,23 @@ class IntelepeerDigester extends DigesterInterface
 
         $this->setTypeRequest($request);
 
+        $output = $this->checkOptions($request);
+        if (count($output) == 0 && $this->session->has('askForVariable')) {
+            //Catch the response if is asking for a variable from user response
+            $variable = $this->processResponseWithSpaces(trim($request['body']));
+            $output[0] = ['variable' => $variable];
+        } else if (count($output) == 0 && isset($request['body'])) {
+            $output[0] = ['message' => $request['body']];
+        }
+        return $output;
+    }
+
+    /**
+     * Check if response has options
+     * @param array $request
+     */
+    protected function checkOptions(array $request)
+    {
         $output = [];
         if ($this->session->has('options')) {
 
@@ -78,7 +93,6 @@ class IntelepeerDigester extends DigesterInterface
             if (isset($request['body'])) {
 
                 $userMessage = $request['body'];
-
                 $selectedOption = false;
                 $selectedOptionText = "";
                 $selectedEscalation = "";
@@ -116,7 +130,7 @@ class IntelepeerDigester extends DigesterInterface
                         $this->session->set('options', $options);
                         $this->session->set('lastUserQuestion', $lastUserQuestion);
                     } else if ($isPolar) { //For polar, on wrong answer, goes for NO
-                        $request['body'] = "No";
+                        $request['body'] = $this->langManager->translate('no');
                     }
                 }
 
@@ -130,12 +144,6 @@ class IntelepeerDigester extends DigesterInterface
                     $output[] = ['message' => $request['body']];
                 }
             }
-        } else if ($this->session->has('askForVariable')) {
-            //Catch the response if is asking for a variable from user response
-            $variable = $this->processResponseWithSpaces(trim($request['body']));
-            $this->connector->setVarFromResponse($variable);
-        } else if (isset($request['body'])) {
-            $output[0] = ['message' => $request['body']];
         }
         return $output;
     }
@@ -408,6 +416,7 @@ class IntelepeerDigester extends DigesterInterface
      */
     public function formatFinalMessage($message)
     {
+        $message = html_entity_decode($message, ENT_COMPAT, "UTF-8");
         $message = str_replace('&nbsp;', ' ', $message);
         $message = str_replace(["\t"], '', $message);
 

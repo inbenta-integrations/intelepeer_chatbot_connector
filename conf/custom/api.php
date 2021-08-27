@@ -4,5 +4,5 @@
 return [
     'key' => '',
     'secret' => '',
-    'init_variable' => '' //empty string if there is no initial variable to check
+    'init_variable' => '' //Set the initial variable name, if needed (empty string if there is no initial variable)
 ];

@@ -3,14 +3,14 @@
 namespace Inbenta\IntelepeerConnector\HyperChatAPI;
 
 use Inbenta\ChatbotConnector\HyperChatAPI\HyperChatClient;
-//use Inbenta\IntelepeerConnector\ExternalAPI\IntelepeerAPIClient;
+use Inbenta\IntelepeerConnector\ExternalAPI\IntelepeerAPIClient;
 
 class IntelepeerHyperChatClient extends HyperChatClient
 {
     private $eventHandlers = array();
-    private $session;
     private $appConf;
     private $externalId;
+    protected $session;
 
     function __construct($config, $lang, $session, $appConf, $externalClient)
     {
@@ -23,12 +23,32 @@ class IntelepeerHyperChatClient extends HyperChatClient
     //Instances an external client
     protected function instanceExternalClient($externalId, $appConf)
     {
-        return null; //$externalClient;
+        $externalFlowId = IntelepeerAPIClient::getFlowIdFromExternalId($externalId);
+        if (is_null($externalFlowId)) {
+            return null;
+        }
+        $externalDnis = IntelepeerAPIClient::getDnisFromExternalId($externalId);
+        if (is_null($externalDnis)) {
+            return null;
+        }
+        $externalAni = IntelepeerAPIClient::getAniFromExternalId($externalId);
+        if (is_null($externalAni)) {
+            return null;
+        }
+        $externalClient = new IntelepeerAPIClient(null, $appConf);
+        $externalClient->setSenderFromId($externalFlowId, $externalDnis, $externalAni, "sms");
+        return $externalClient;
     }
 
     public static function buildExternalIdFromRequest($config)
     {
-        return null;
-    }
+        $request = json_decode(file_get_contents('php://input'), true);
 
+        $externalId = null;
+        if (isset($request['trigger'])) {
+            //Obtain user external id from the chat event
+            $externalId = self::getExternalIdFromEvent($config, $request);
+        }
+        return $externalId;
+    }
 }

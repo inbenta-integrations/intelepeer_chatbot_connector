@@ -4,14 +4,12 @@ namespace Inbenta\IntelepeerConnector;
 
 use Exception;
 use Inbenta\ChatbotConnector\ChatbotConnector;
+use Inbenta\ChatbotConnector\ChatbotAPI\ChatbotAPIClient;
 use Inbenta\ChatbotConnector\Utils\SessionManager;
 use Inbenta\IntelepeerConnector\ExternalAPI\IntelepeerAPIClient;
 use Inbenta\IntelepeerConnector\ExternalDigester\IntelepeerDigester;
 use Inbenta\IntelepeerConnector\HyperChatAPI\IntelepeerHyperChatClient;
-
-## Customized Chatbot API
-use Inbenta\IntelepeerConnector\APIClientCustom\ChatbotAPIClientCustom as ChatbotAPIClient;
-
+use Inbenta\IntelepeerConnector\Helpers\Helper;
 
 class IntelepeerConnector extends ChatbotConnector
 {
@@ -55,6 +53,17 @@ class IntelepeerConnector extends ChatbotConnector
         }
     }
 
+    /**
+     *	Retrieve Language translations from ExtraInfo
+     */
+    protected function getTranslationsFromExtraInfo($parentGroupName, $translationsObjectName)
+    {
+        $translations = [];
+        $language = $this->conf->get('conversation.default.lang');
+        if (isset($translations[$language]) && count($translations[$language]) && is_array($translations[$language][0])) {
+            $this->lang->addTranslations($translations[$language][0]);
+        }
+    }
 
     /**
      * Return external id from request (Hyperchat of Intelepeer)
@@ -81,7 +90,9 @@ class IntelepeerConnector extends ChatbotConnector
     }
 
     /**
-     *	Override from parent
+     * Override from parent
+     * This allow to "echo" the response
+     * otherwise won't show anything
      */
     protected function returnOkResponse()
     {
@@ -113,6 +124,10 @@ class IntelepeerConnector extends ChatbotConnector
         if ($this->session->get('askingForEscalation', false)) {
             $this->handleEscalation($digestedRequest);
         }
+        // If user answered to a rating question, handle it
+        if ($this->session->get('askingRating', false)) {
+            $this->handleRating($digestedRequest);
+        }
     }
 
     /**
@@ -129,6 +144,10 @@ class IntelepeerConnector extends ChatbotConnector
 
             // Store the last user text message to session
             $this->saveLastTextMessage($message);
+
+            // Check if is needed to ask for a rating comment
+            $message = $this->checkContentRatingsComment($message);
+
             // Send the messages received from the external service to the ChatbotAPI
             $botResponse = $this->sendMessageToBot($message);
 
@@ -149,18 +168,6 @@ class IntelepeerConnector extends ChatbotConnector
 
             // Send the messages received from ChatbotApi back to the external service
             $this->sendMessagesToExternal($botResponse);
-        }
-    }
-
-    /**
-     *	Retrieve Language translations from ExtraInfo
-     */
-    protected function getTranslationsFromExtraInfo($parentGroupName, $translationsObjectName)
-    {
-        $translations = [];
-        $language = $this->conf->get('conversation.default.lang');
-        if (isset($translations[$language]) && count($translations[$language]) && is_array($translations[$language][0])) {
-            $this->lang->addTranslations($translations[$language][0]);
         }
     }
 
@@ -227,6 +234,11 @@ class IntelepeerConnector extends ChatbotConnector
         if (trim($escalationMessage) !== "") {
             $messageToSend .= trim($messageToSend) === '' ? $escalationMessage : ', ' . $escalationMessage;
         }
+        $ratingMessage = $this->validateShowRatings($messages);
+        if (trim($ratingMessage) !== "") {
+            $messageToSend .= trim($messageToSend) === '' ? $ratingMessage : ', ' . $ratingMessage;
+        }
+        $messageToSend = str_replace("\r\n ", "\r\n", $messageToSend);
         $this->externalClient->sendMessage($messageToSend, $phoneToTransfer);
     }
 
@@ -484,5 +496,87 @@ class IntelepeerConnector extends ChatbotConnector
         $this->session->delete('escalationType');
         $this->session->delete('escalationV2');
         $this->sendMessagesToExternal($messageToUser);
+    }
+
+    /**
+     * Validate if is going to show the rating option
+     */
+    protected function validateShowRatings($botResponse)
+    {
+        if ($this->digester->typeRequest === 'sms') {
+            // Check if is needed to display content ratings
+            $hasRating = $this->checkContentRatings($botResponse);
+            $needContentRating = $hasRating ? $hasRating : false;
+            if (
+                $needContentRating && !$this->chatOnGoing() && !$this->session->get('askingForEscalation', false)
+                && !$this->session->get('hasRelatedContent', false) && !$this->session->get('options', false)
+            ) {
+                return $this->displayContentRatings($needContentRating);
+            }
+        }
+        return "";
+    }
+
+    /**
+     * Overwritten
+     * 	Display content rating message
+     */
+    protected function displayContentRatings($rateCode)
+    {
+        $ratingOptions = $this->conf->get('conversation.content_ratings.ratings');
+        $ratingMessage = $this->digester->buildContentRatingsMessage($ratingOptions, $rateCode);
+        $this->session->set('askingRating', true);
+        $this->session->set('rateCode', $rateCode);
+        return $ratingMessage;
+    }
+
+    /**
+     * 	Ask the user if wants to talk with a human and handle the answer
+     * @param array $userAnswer = null
+     */
+    protected function handleRating($userAnswer = null)
+    {
+        // Ask the user if wants to escalate
+        // Handle user response to an rating question
+        $this->session->set('askingRating', false);
+        $ratingOptions = $this->conf->get('conversation.content_ratings.ratings');
+        $ratingCode = $this->session->get('rateCode', false);
+        $event = null;
+
+        if (count($userAnswer) && isset($userAnswer[0]['message']) && $ratingCode) {
+            foreach ($ratingOptions as $index => $option) {
+                if ($index + 1 == (int) $userAnswer[0]['message'] || Helper::removeAccentsToLower($userAnswer[0]['message']) === Helper::removeAccentsToLower($this->lang->translate($option['label']))) {
+                    $event = $this->formatRatingEvent($ratingCode, $option['id']);
+                    if (isset($option["comment"]) && $option["comment"]) {
+                        $this->session->set('askingRatingComment', $event);
+                    }
+                    break;
+                }
+            }
+            if ($event) {
+                // Rate if the answer was correct
+                $this->sendMessagesToExternal($this->sendEventToBot($event));
+                die;
+            }
+        }
+    }
+
+    /**
+     * Return formated rate event
+     *
+     * @param string $ratingCode
+     * @param integer $ratingValue
+     * @return array
+     */
+    private function formatRatingEvent($ratingCode, $ratingValue, $comment = '')
+    {
+        return [
+            'type' => 'rate',
+            'data' => [
+                'code' => $ratingCode,
+                'value' => $ratingValue,
+                'comment' => $comment
+            ]
+        ];
     }
 }

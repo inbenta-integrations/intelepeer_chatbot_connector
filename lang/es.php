@@ -3,6 +3,7 @@
 return [
     'agent_joined' => 'El agente $agentName se ha unido a la conversación.',
     'api_timeout' => 'Por favor, reformula tu pregunta.',
+    'ask_rating_comment' => 'Por favor dinos porqué',
     'ask_to_escalate' => '¿Quieres iniciar un chat con un agente?',
     'chat_closed' => 'Chat cerrado',
     'creating_chat' => 'Voy a intentar conectarle con un agente. Espere por favor.',
@@ -17,5 +18,6 @@ return [
     'yes' => 'Sí',
     'name_of' => 'Porfavor, dime el nombre de:',
     'not_found' => 'no encontrado.',
-    'try_again' => 'intenta de nuevo.'
+    'try_again' => 'intenta de nuevo.',
+    'rate_content_intro' => '¿Te ha servido esta respuesta?'
 ];

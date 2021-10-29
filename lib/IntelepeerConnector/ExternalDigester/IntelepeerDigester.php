@@ -8,7 +8,6 @@ use Inbenta\ChatbotConnector\ExternalDigester\Channels\DigesterInterface;
 class IntelepeerDigester extends DigesterInterface
 {
     protected $conf;
-    //protected $channel;
     protected $langManager;
     protected $session;
     public $typeRequest;
@@ -19,7 +18,6 @@ class IntelepeerDigester extends DigesterInterface
     public function __construct($langManager, $conf, $session)
     {
         $this->langManager = $langManager;
-        //$this->channel = 'intelepeer';
         $this->conf = $conf;
         $this->session = $session;
     }
@@ -89,6 +87,7 @@ class IntelepeerDigester extends DigesterInterface
             $options = $this->session->get('options');
             $this->session->delete('options');
             $this->session->delete('lastUserQuestion');
+            $this->session->delete('hasRelatedContent');
 
             if (isset($request['body'])) {
 
@@ -165,7 +164,6 @@ class IntelepeerDigester extends DigesterInterface
         }
 
         $output = [];
-
         foreach ($messages as $msg) {
             $msgType = $this->checkApiMessageType($msg);
             $digester = 'digestFromApi' . ucfirst($msgType);
@@ -328,7 +326,11 @@ class IntelepeerDigester extends DigesterInterface
      */
     public function buildContentRatingsMessage($ratingOptions, $rateCode)
     {
-        return "";
+        $message = $this->langManager->translate('rate_content_intro') . "\n";
+        foreach ($ratingOptions as $index => $option) {
+            $message .= "\n" . ($index + 1) . ") " . $this->langManager->translate($option['label']);
+        }
+        return $message;
     }
 
     /**
@@ -374,6 +376,7 @@ class IntelepeerDigester extends DigesterInterface
                 $messageTxt .= $optionList;
                 $this->session->set('options', (object) $options);
                 $this->session->set('lastUserQuestion', $lastUserQuestion);
+                $this->session->set('hasRelatedContent', true);
             }
         }
     }
@@ -416,9 +419,11 @@ class IntelepeerDigester extends DigesterInterface
      */
     public function formatFinalMessage($message)
     {
-        $message = html_entity_decode($message, ENT_COMPAT, "UTF-8");
-        $message = str_replace('&nbsp;', ' ', $message);
+        $message = str_replace("&nbsp;", " ", $message);
         $message = str_replace(["\t"], '', $message);
+        $message = str_ireplace(["’", "&sbquo;"], "'", $message);
+
+        $message = html_entity_decode($message, ENT_COMPAT, "UTF-8");
 
         $breaks = array("<br />", "<br>", "<br/>", "<p>");
         $message = str_ireplace($breaks, "\n", $message);

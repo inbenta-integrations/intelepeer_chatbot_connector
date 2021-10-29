@@ -6,11 +6,11 @@
         }
     ],
     "require": {
-        "inbenta/chatbot-api-connector": "1.3.17",
+        "inbenta/chatbot-api-connector": "1.3.18",
         "php": "~7.1"
     },
-    "autoload":{
-        "psr-4":{
+    "autoload": {
+        "psr-4": {
             "Inbenta\\IntelepeerConnector\\": "lib/IntelepeerConnector"
         }
     }
